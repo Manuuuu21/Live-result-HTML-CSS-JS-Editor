@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Result HTML, CSS, JS Editor</title>
+    <link rel="stylesheet" href="libs/codemirror.min.css">
+    <link rel="stylesheet" href="libs/dracula.css">
+    <script src="libs/codemirror.min.js"></script>
+    <script src="libs/htmlmixed.min.js"></script>
+    <script src="libs/xml.min.js"></script>
+    <script src="libs/javascript.min.js"></script>
+    <script src="libs/css.min.js"></script>
+
+    <script src="libs/closetag.min.js"></script>
+    <script src="libs/closebrackets.min.js"></script>
+    <script src="libs/matchbrackets.js"></script>
+    <script src="libs/active-line.js"></script>
+
+    <script src="libs/annotatescrollbar.js"></script>
+    <script src="libs/matchesonscrollbar.js"></script>
+    <script src="libs/searchcursor.js"></script>
+    <script src="libs/match-highlighter.js"></script>
+
+    <style>
+        /* Apply border-box to all elements for consistent sizing */
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+            display: flex;
+            flex-direction: column; /* Stack content vertically */
+            height: 100vh; /* Full viewport height */
+            margin: 0; /* Remove default body margin */
+        }
+
+        h1 {
+            font-size: 1.5rem; /* Heading size */
+            font-weight: bold;
+            margin-bottom: 1rem; /* Space below heading */
+            text-align: center;
+            padding-top: 1rem; /* Padding at the top */
+        }
+    
+        .container {
+            display: flex; /* Arrange editor and result panels horizontally */
+            flex-grow: 1; /* Allow container to fill remaining vertical space */
+            overflow: hidden; /* Hide overflowing content */
+            padding: 0 1rem 1rem 1rem; /* Padding around the panels */
+        }
+
+        .panel {
+            display: flex;
+            flex-direction: column; /* Stack content within panels vertically */
+            flex-grow: 0; /* Prevent panels from growing automatically */
+            flex-shrink: 0; /* Prevent panels from shrinking automatically */
+            flex-basis: auto; /* Let width property control size */
+        }
+
+        .editor-panel {
+            width: 50%; /* Initial width for the editor panel */
+            padding-right: 0.5rem; /* Space between editor and resizer */
+            display: flex; /* Make editor panel a flex container */
+            flex-direction: column; /* Stack tabs and editor vertically */
+        }
+
+        .result-panel {
+            width: 50%; /* Initial width for the result panel */
+            padding-left: 0.5rem; /* Space between resizer and result */
+            display: flex; /* Make result panel a flex container */
+            flex-direction: column; /* Stack label and result area vertically */
+        }
+
+         .panel label {
+             display: block; /* Label on its own line */
+             font-size: 1.125rem; /* Label font size */
+             font-weight: 500;
+             color: #4b5563; /* Dark gray text */
+             margin-bottom: 0.5rem; /* Space below label */
+         }
+
+        /* Styles for the tabs */
+        .tab-container {
+            display: flex; /* Arrange tab buttons horizontally */
+            margin-bottom: 0.5rem; /* Space between tabs and editor */
+            border-bottom: 1px solid #ccc; /* Separator line below tabs */
+        }
+
+        .tab-button {
+            padding: 0.5rem 1rem; /* Padding inside buttons */
+            border: 1px solid #ccc; /* Button border */
+            border-bottom: none; /* Remove bottom border */
+            background-color: #eee; /* Light gray background */
+            cursor: pointer; /* Indicate clickable */
+            font-size: 1rem;
+            border-top-left-radius: 0.25rem; /* Rounded top-left corner */
+            border-top-right-radius: 0.25rem; /* Rounded top-right corner */
+            transition: background-color 0.2s ease; /* Smooth hover effect */
+        }
+
+        .tab-button:hover {
+            background-color: #ddd; /* Darker gray on hover */
+        }
+
+        .tab-button.active {
+            background-color: #fff; /* White background for active tab */
+            border-bottom: 1px solid #fff; /* Hide bottom border on active tab */
+            font-weight: bold;
+        }
+
+        .toggle-theme-button {
+            width: auto;
+            margin-left: 25.5rem;
+            padding: 0.5rem 1rem;
+            border: 1px solid #ccc;
+            border-bottom: none;
+            background-color: #eee;
+            cursor: pointer;
+            font-size: 1rem;
+            border-top-left-radius: 0.25rem;
+            border-top-right-radius: 0.25rem;
+        }
+
+        /* Container for CodeMirror instances */
+        .editor-content {
+            flex-grow: 1; /* Allow editor content to fill remaining vertical space */
+            border: 1px solid #ddd; /* Border around the editor area */
+            border-radius: 0.5rem; /* Rounded corners */
+            overflow: hidden; /* Hide inactive editors */
+            position: relative; /* For positioning CodeMirror instances */
+        }
+
+        .editor-instance {
+            position: absolute; /* Position editors absolutely within the container */
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none; /* Hide by default */
+        }
+
+        .editor-instance.active {
+            display: block; /* Show active editor */
+        }
+
+
+        /* Basic styling for CodeMirror to fit the container */
+        .CodeMirror {
+            height: 100%; /* Make CodeMirror fill its container height */
+            border: none; /* Remove border as container has it */
+            border-radius: 0; /* Remove border-radius as container has it */
+        }
+
+        .result-content-wrapper {
+            flex-grow: 1; /* Allow result content wrapper to fill remaining vertical space below the label */
+            border: 1px solid #ddd; /* Border around the result area */
+            border-radius: 0.5rem; /* Rounded corners */
+            overflow: hidden; /* Hide overflowing content */
+            background-color: #fff; /* White background */
+            display: flex; /* Make this a flex container for resizer and iframe */
+            flex-direction: row; /* Arrange children horizontally */
+        }
+
+        /* Ensure the iframe wrapper takes up space within the flex container */
+        #iframewrapper {
+            width: 100%; /* Ensure iframe wrapper takes full width of its flex container */
+            height: 100%; /* Make wrapper fill its container height */
+            flex-grow: 1; /* Allow iframe wrapper to fill remaining space */
+            flex-shrink: 1; /* Allow iframe wrapper to shrink */
+        }
+        /* Style for the iframe */
+        #iframeResult {
+            width: 100%;
+            height: 100%; /* Make iframe fill its wrapper height */
+            border: none;
+            background-color: white;
+        }
+
+        /* Style for the resize handle */
+        .resizer {
+            width: 5px; /* Fixed width of the draggable area */
+            height: 100%; /* Make handle fill the height */
+            background-color: #ccc; /* Visual indicator for the handle */
+            cursor: ew-resize; /* Indicate horizontal resizing */
+            flex-shrink: 0; /* Prevent the resizer from shrinking */
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Live Result HTML, CSS, JS Editor</h1>
+
+    <div class="container">
+        <div class="panel editor-panel">
+            <label>Code Editor:</label>
+            <div class="tab-container">
+                <button class="tab-button active" onclick="openTab(event, 'html')">HTML</button>
+                <button class="tab-button" onclick="openTab(event, 'css')">CSS</button>
+                <button class="tab-button" onclick="openTab(event, 'js')">JS</button>
+
+                <button class="toggle-theme-button" onclick="toggleTheme()">Toggle Theme</button>
+            </div>
+            <div class="editor-content">
+                <div id="htmlEditor" class="editor-instance active">
+                    <textarea id="htmlCode"></textarea>
+                </div>
+                <div id="cssEditor" class="editor-instance">
+                    <textarea id="cssCode"></textarea>
+                </div>
+                <div id="jsEditor" class="editor-instance">
+                    <textarea id="jsCode"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel result-panel">
+             <label>Result:</label>
+            <div id="resultPanelContent" class="result-content-wrapper">
+                 <div class="resizer" id="iframeResizer"></div>
+                 <div id="iframewrapper">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let htmlEditor, cssEditor, jsEditor; // Variables to hold the CodeMirror instances
+        let autoRunTimer; // Timer for debouncing the auto-run
+        let resultIframe; // Variable to hold the iframe element
+        let isResizing = false; // Flag to indicate if resizing is in progress
+        let lastX; // Stores the last X position of the mouse during resizing
+        let editorPanel; // Variable to hold the editor panel element
+        let resultPanel; // Variable to hold the result panel element
+        let container; // Variable to hold the main container element
+        let resultPanelContent; // Variable to hold the inner flex container in the result panel
+        let activeTab = 'html'; // Keep track of the currently active tab
+        let currentTheme = "dracula"; // Theme options: dracula or default
+
+        // Initialize CodeMirror instances and set up the layout once the DOM is ready
+        window.onload = function() {
+            // Initialize HTML editor
+            htmlEditor = CodeMirror.fromTextArea(document.getElementById("htmlCode"), {
+                mode: "htmlmixed", // Set mode to HTML with mixed CSS and JS
+                lineNumbers: true, // Show line numbers
+                theme: currentTheme, // Use the default theme
+                indentUnit: 4, // Set indent unit to 4 spaces
+                indentWithTabs: false, // Use spaces instead of tabs
+                autoCloseTags: true, // Auto-close HTML tags
+                autoCloseBrackets: true, // Auto-close brackets
+                matchBrackets: true,
+                styleActiveLine: true,
+                highlightSelectionMatches: {
+                  showToken: /\w/, // only match word-like tokens
+                  annotateScrollbar: false // optional scrollbar highlights
+                }
+            });
+
+            // Initialize CSS editor
+            cssEditor = CodeMirror.fromTextArea(document.getElementById("cssCode"), {
+                mode: "css", // Set mode to CSS
+                lineNumbers: true,
+                theme: currentTheme,
+                indentUnit: 4,
+                indentWithTabs: false,
+                autoCloseBrackets: true,
+                matchBrackets: true,
+                styleActiveLine: true,
+                highlightSelectionMatches: {
+                  showToken: /\w/, // only match word-like tokens
+                  annotateScrollbar: false // optional scrollbar highlights
+                }
+            });
+
+            // Initialize JavaScript editor
+            jsEditor = CodeMirror.fromTextArea(document.getElementById("jsCode"), {
+                mode: "javascript", // Set mode to JavaScript
+                lineNumbers: true,
+                theme: currentTheme,
+                indentUnit: 4,
+                indentWithTabs: false,
+                autoCloseBrackets: true,
+                matchBrackets: true,
+                styleActiveLine: true,
+                highlightSelectionMatches: {
+                  showToken: /\w/, // only match word-like tokens
+                  annotateScrollbar: false // optional scrollbar highlights
+                }
+            });
+
+            // Set initial sample code in each editor
+            htmlEditor.setValue(``);
+            cssEditor.setValue(``)
+            jsEditor.setValue(``);
+
+
+            // Get the panel and container elements
+            editorPanel = document.querySelector('.editor-panel');
+            resultPanel = document.querySelector('.result-panel');
+            container = document.querySelector('.container');
+            resultPanelContent = document.getElementById('resultPanelContent');
+
+            // Add event listener for resizing
+            const resizer = document.getElementById("iframeResizer");
+            if (resizer) {
+                resizer.addEventListener('mousedown', handleMouseDown);
+            } else {
+                console.error("Resizer element not found!");
+            }
+
+            // Add event listeners to the document for mouse move and mouse up
+            // These are added here so they are always active for resizing
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+
+            // Add change listeners to all editors for auto-run
+            htmlEditor.on('change', debounceSubmit);
+            cssEditor.on('change', debounceSubmit);
+            jsEditor.on('change', debounceSubmit);
+
+            // Initial run of the code when the page loads
+            submitCode();
+        };
+
+        function toggleTheme() {
+            currentTheme = currentTheme === "default" ? "dracula" : "default";
+            htmlEditor.setOption("theme", currentTheme);
+            cssEditor.setOption("theme", currentTheme);
+            jsEditor.setOption("theme", currentTheme);
+        }
+
+        // Function to debounce the submitCode calls
+        function debounceSubmit() {
+            clearTimeout(autoRunTimer); // Clear any existing timer
+            autoRunTimer = setTimeout(submitCode, 100); // Set a new timer to run after 500ms
+        }
+
+        // Function to switch between tabs
+        function openTab(evt, tabName) {
+            // Hide all editor instances
+            const tabContent = document.querySelectorAll('.editor-instance');
+            tabContent.forEach(content => content.classList.remove('active'));
+
+            // Deactivate all tab buttons
+            const tabButtons = document.querySelectorAll('.tab-button');
+            tabButtons.forEach(button => button.classList.remove('active'));
+
+            // Show the selected editor instance and activate the clicked button
+            document.getElementById(tabName + 'Editor').classList.add('active');
+            evt.currentTarget.classList.add('active');
+
+            activeTab = tabName; // Update active tab
+
+            // Refresh the CodeMirror instance in the newly active tab
+            if (activeTab === 'html') htmlEditor.refresh();
+            if (activeTab === 'css') cssEditor.refresh();
+            if (activeTab === 'js') jsEditor.refresh();
+        }
+
+        // Function to handle mouse down event on the resizer
+        function handleMouseDown(e) {
+            isResizing = true;
+            lastX = e.clientX; // Store the initial X position
+            e.preventDefault(); // Prevent default behavior (like text selection)
+        }
+
+        // Function to handle mouse move event during resizing
+        function handleMouseMove(e) {
+            if (!isResizing) return; // Only resize if dragging is in progress
+
+            const containerWidth = container.offsetWidth; // Get the total width of the container
+
+            // Calculate the percentage for the editor panel based on mouse position
+            // The resizer is between the editor and result panels.
+            let percentage = ((e.clientX - container.getBoundingClientRect().left) / containerWidth) * 100; // Calculate relative to container
+
+            // Optional: Add minimum width constraints in percentages
+            const minPercentage = 5; // Minimum percentage for each panel
+
+            if (percentage > minPercentage && (100 - percentage) > minPercentage) {
+                // Update the widths of the editor and result panels using percentages
+                editorPanel.style.width = percentage + '%';
+                resultPanel.style.width = (100 - percentage) + '%';
+                lastX = e.clientX; // Update last X position
+
+                // Refresh all CodeMirror instances after resizing to adjust their layout
+                htmlEditor.refresh();
+                cssEditor.refresh();
+                jsEditor.refresh();
+            }
+        }
+
+        // Function to handle mouse up event, ending the resizing
+        function handleMouseUp() {
+            isResizing = false; // End resizing
+        }
+
+        // Function to submit the code from CodeMirror instances and run it in an iframe
+        function submitCode() {
+            const htmlCode = htmlEditor.getValue(); // Get HTML code
+            const cssCode = cssEditor.getValue();   // Get CSS code
+            const jsCode = jsEditor.getValue();     // Get JavaScript code
+
+            const iframeWrapper = document.getElementById("iframewrapper");
+
+            if (!iframeWrapper) {
+                console.error("iframewrapper element not found!");
+                return;
+            }
+
+            // Remove old iframe if it exists
+            let resultIframe = document.getElementById("iframeResult");
+            if (resultIframe) {
+                resultIframe.remove();
+            }
+
+            // Create a new iframe
+            resultIframe = document.createElement("iframe");
+            resultIframe.setAttribute("frameborder", "0");
+            resultIframe.setAttribute("id", "iframeResult");
+            resultIframe.setAttribute("name", "iframeResult");
+            resultIframe.setAttribute("allowfullscreen", "true");
+            iframeWrapper.appendChild(resultIframe);
+
+            // Use srcdoc to inject HTML, CSS, and JS cleanly
+            const completeCode = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Result</title>
+              <style>
+                ${cssCode}
+              </style>
+            </head>
+            <body>
+              ${htmlCode}
+              <script>
+                ${jsCode.replace(/<\/script>/g, "<\\/script>")}
+              <\/script>
+            </body>
+            </html>`;
+
+            // Set the iframe's content using srcdoc
+            resultIframe.srcdoc = completeCode;
+        }
+    </script>
+
+</body>
+</html>
